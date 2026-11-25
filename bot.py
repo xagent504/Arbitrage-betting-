@@ -516,4 +516,79 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         context.user_data["pack"] = pack
 
     if data == "nav_back":
-        seed = context.user_data.get("variation_seed", 
+        seed = context.user_data.get("variation_seed", 0)
+        await query.edit_message_text(
+            f"মূল মেনু (**{type_label}** • **{mood_label}** • সেট #{seed + 1}):",
+            parse_mode="Markdown",
+            reply_markup=main_menu_keyboard(),
+        )
+        return
+
+    if data == "render_overlay":
+        seed = context.user_data.get("variation_seed", 0)
+        await query.edit_message_text(
+            "ছবির ওপর টেক্সট বসিয়ে ছবি তৈরি করা হচ্ছে, একটু অপেক্ষা করো..."
+        )
+        tg_file = await context.bot.get_file(file_id)
+        raw_bytes = await tg_file.download_as_bytearray()
+        overlay_text = get_overlay_text(type_key, mood_key, seed)
+        rendered_photo = render_photo_with_text(bytes(raw_bytes), overlay_text)
+
+        await query.message.reply_photo(
+            photo=rendered_photo,
+            caption=f"টেক্সট যুক্ত ছবি ({type_label} • {mood_label} • সেট #{seed + 1})",
+        )
+        await query.message.reply_text(
+            f"মূল মেনু (**{type_label}** • **{mood_label}** • সেট #{seed + 1}):",
+            parse_mode="Markdown",
+            reply_markup=main_menu_keyboard(),
+        )
+        return
+
+    if data == "sec_text":
+        await query.edit_message_text(
+            pack["text_ideas"],
+            reply_markup=text_section_keyboard(),
+        )
+        return
+
+    section_map = {
+        "sec_caption": "captions",
+        "sec_engage": "engagement",
+        "sec_replies": "replies",
+        "sec_tags": "tags_and_tips",
+        "sec_algo": "algo_checklist",
+    }
+
+    key = section_map.get(data)
+    if key:
+        await query.edit_message_text(
+            pack[key],
+            reply_markup=sub_menu_keyboard(),
+        )
+
+
+async def handle_other_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(
+        "অনুগ্রহ করে একটি ছবি পাঠাও, অথবা শুরু করতে /start চাপো।"
+    )
+
+
+def main() -> None:
+    token = os.getenv("BOT_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError("BOT_TOKEN এনভায়রনমেন্ট ভ্যারিয়েবল সেট করা নেই।")
+
+    app = Application.builder().token(token).build()
+
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(CallbackQueryHandler(handle_callback))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_other_text))
+
+    logger.info("Bot is running...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+if __name__ == "__main__":
+    main()
